@@ -22,6 +22,8 @@ classes = ('cherry', 'strawberry', 'tomato')
 
 data_path = "C:/workspace/traindata/traindata"
 data_all = torchvision.datasets.ImageFolder(root=data_path, transform=transform)
+test_data_path = "C:/workspace/traindata/testdata"
+test_data = torchvision.datasets.ImageFolder(root=test_data_path, transform=transform_test)
 
 # %%
 import torch.utils.data as data
@@ -50,6 +52,7 @@ batch_size = 20
 trainloader = data.DataLoader(data_all, batch_size=batch_size, num_workers=0, sampler=train_sampler)
 validloader = data.DataLoader(data_all, batch_size=batch_size, num_workers=0, sampler=val_sampler)
 
+testloader = data.DataLoader(test_data, batch_size=batch_size, num_workers=0)
 ##获得一个batch的数据
 for step, (b_x, b_y) in enumerate(trainloader):
     if step > 0:
@@ -137,12 +140,12 @@ optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 
 # %%
 
-num_epochs = 5
+num_epochs = 10
 num_classes = 2
 batch_size = 25
 learning_rate = 0.001
 
-epochs = 5
+epochs = 10
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 device
@@ -187,15 +190,13 @@ for epoch in range(1, num_epochs + 1):
     print('Epoch: {} \tTraining Loss: {:.6f} \tValidation Loss: {:.6f}'.format(epoch, train_loss, valid_loss))
 
 print('Finish training')
+
 # %%
 PATH = './cifar_net.pth'
 torch.save(net.state_dict(), PATH)
 
 # %%
 # test
-data_path = "C:/workspace/traindata/test"
-test_data = torchvision.datasets.ImageFolder(root=data_path, transform=transform)
-testloader = data.DataLoader(data_all, batch_size=batch_size, num_workers=0, sampler=val_sampler)
 test_dataiter = iter(testloader)
 
 # print the image
