@@ -48,7 +48,7 @@ train_sampler, val_sampler = dataset_sampler(data_all)
 
 batch_size = 20
 trainloader = data.DataLoader(data_all, batch_size=batch_size, num_workers=0, sampler=train_sampler)
-testloader = data.DataLoader(data_all, batch_size=batch_size, num_workers=0, sampler=val_sampler)
+validloader = data.DataLoader(data_all, batch_size=batch_size, num_workers=0, sampler=val_sampler)
 
 ##获得一个batch的数据
 for step, (b_x, b_y) in enumerate(trainloader):
@@ -64,15 +64,40 @@ import numpy as np
 
 
 def imshow(img):
-    img = img / 2 + 0.5
-    npimg = img.numpy()
-    plt.imshow(np.transpose(npimg, (1, 2, 0)), vmin=0, vmax=255)
-    plt.show()
+    def imshow(image, ax=None, title=None, normalize=True):
+        if ax is None:
+            fig, ax = plt.subplots()
+        image = image.numpy().transpose((1, 2, 0))
+
+        if normalize:
+            mean = np.array([0.485, 0.456, 0.406])
+            std = np.array([0.229, 0.224, 0.225])
+            image = std * image + mean
+            image = np.clip(image, 0, 1)
+
+        ax.imshow(image)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.tick_params(axis='both', length=0)
+        ax.set_xticklabels('')
+        ax.set_yticklabels('')
+
+        return ax
 
 
+# %%
 dataiter = iter(trainloader)
 images, labels = dataiter.next()
 
+fig, axes = plt.subplots(figsize=(12, 12), ncols=5)
+print('training images')
+for i in range(5):
+    axe1 = axes[i]
+    imshow(images[i])
+
+print(images[0].size())
 imshow(torchvision.utils.make_grid(images))
 print(classes)
 print(','.join('%5s' % classes[labels[j]] for j in range(batch_size)))
@@ -88,6 +113,7 @@ class Net(nn.Module):
         self.conv1 = nn.Conv2d(3, 6, 5)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(6, 16, 5)
+        self.conv2_drop = nn.Dropout2d()
         self.fc1 = nn.Linear(16 * 5 * 5, 120)
         self.fc2 = nn.Linear(120, 84)
         self.fc3 = nn.Linear(84, 10)
@@ -97,6 +123,7 @@ class Net(nn.Module):
         x = self.pool(F.relu(self.conv2(x)))
         x = torch.flatten(x, 1)  # flatten all dimensions except batch
         x = F.relu(self.fc1(x))
+        x = F.dropout(x, training=self.training)
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return x
@@ -107,29 +134,68 @@ import torch.optim as optim
 net = Net()
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+
 # %%
-for epoch in range(2):
-    running_loss = 0.0
-    for i, data in enumerate(trainloader, 0):
-        inputs, labels = data
+
+num_epochs = 5
+num_classes = 2
+batch_size = 25
+learning_rate = 0.001
+
+epochs = 5
+
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+device
+# %%
+train_losses = []
+valid_losses = []
+for epoch in range(1, num_epochs + 1):
+    train_loss = 0.0
+    valid_loss = 0.0
+    net.train()
+    for data, label in trainloader:
+        data = data.to(device)
+        target = label.to(device)
         optimizer.zero_grad()
-        outputs = net(inputs)
-        loss = criterion(outputs, labels)
+        # forward-pass: compute-predicted-outputs-by-passing-inputs-to-the-model
+        output = net(data)
+        # calculate-the-batch-loss
+        loss = criterion(output, target)
+        # backward-pass: compute-gradient-of-the-loss-wrt-model-parameters
         loss.backward()
+        # perform-a-ingle-optimization-step (parameter-update)
         optimizer.step()
-        running_loss += loss.item()
-        if i % 2000 == 1999:
-            print('[%d, %5d] loss: %.3f' % (epoch + 1, i + 1, running_loss / 2000))
-            running_loss = 0.0
+        # update-training-loss
+        train_loss += loss.item() * data.size(0)
+        # validate-the-model
+        net.eval()
+    for data, target in validloader:
+         data = data.to(device)
+         target = target.to(device)
+         output = net(data)
+         loss = criterion(output, target)
+         # update-average-validation-loss
+         valid_loss += loss.item() * data.size(0)
+
+        # calculate-average-losses
+    train_loss = train_loss / len(trainloader.sampler)
+    valid_loss = valid_loss / len(validloader.sampler)
+    train_losses.append(train_loss)
+    valid_losses.append(valid_loss)
+
+    # print-training/validation-statistics
+    print('Epoch: {} \tTraining Loss: {:.6f} \tValidation Loss: {:.6f}'.format(epoch, train_loss, valid_loss))
 
 print('Finish training')
-
 # %%
 PATH = './cifar_net.pth'
 torch.save(net.state_dict(), PATH)
 
 # %%
 # test
+data_path = "C:/workspace/traindata/test"
+test_data = torchvision.datasets.ImageFolder(root=data_path, transform=transform)
+testloader = data.DataLoader(data_all, batch_size=batch_size, num_workers=0, sampler=val_sampler)
 test_dataiter = iter(testloader)
 
 # print the image
@@ -184,8 +250,7 @@ with torch.no_grad():
 # print accuracy for each class
 for classname, correct_count in correct_pred.items():
     accuracy = 100 * float(correct_count) / total_pred[classname]
-    print("Accuracy for class {:5s} is: {:.1f} %".format(classname,
-                                                         accuracy))
+    print("Accuracy for class {:5s} is: {:.1f} %".format(classname, accuracy))
 
 # %%
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
